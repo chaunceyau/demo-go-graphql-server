@@ -18,7 +18,8 @@ type User struct {
 	FriendIDs  []string
 }
 
-type query struct{}
+type query struct {
+}
 
 var lfaker = faker.NewFaker()
 
@@ -37,8 +38,8 @@ func findUserById(id string) *User {
 	return nil
 }
 
-func findFriendsByUserId(userId string) *[]User {
-	var friends []User
+func findFriendsByUserId(userId string) []*User {
+	var friends []*User
 	user := findUserById(userId)
 	if user == nil {
 		return nil
@@ -47,50 +48,51 @@ func findFriendsByUserId(userId string) *[]User {
 	for _, friendUserId := range user.FriendIDs {
 		friend := findUserById(friendUserId)
 		if friend != nil {
-			friends = append(friends, *friend)
+			friends = append(friends, friend)
 		}
 	}
 
-	return &friends
+	return friends
 }
 
-func (query) UserById(args struct{ ID string }) *User {
-	return findUserById(args.ID)
+func (q *query) UserById(ctx context.Context, args struct{ ID graphql.ID }) *User {
+	return findUserById(string(args.ID))
 }
 
-func (user *User) Friends(ctx context.Context) *[]User {
+func (user *User) Friends(ctx context.Context) []*User {
 	return findFriendsByUserId(user.IDField)
 }
 
-func (user User) ID() graphql.ID {
+func (user *User) ID(ctx context.Context) graphql.ID {
 	return graphql.ID(user.IDField)
 }
 
-func (user User) Name() *string {
+func (user *User) Name(ctx context.Context) *string {
 	if user.NameField == "" {
 		return nil
 	}
 	return &user.NameField
 }
 
-func (user User) Email() string {
+func (user *User) Email(ctx context.Context) string {
 	return user.EmailField
 }
 
 func main() {
-	s := `
-		type User {
-			id: ID!
-			name: String
-			email: String!
-			friends: [User]
-		}
+	schemaStr := `
+        type User {
+            id: ID!
+            name: String
+            email: String!
+            friends: [User]!
+        }
 
         type Query {
-			userById(id: ID!): User
+            userById(id: ID!): User
         }
     `
-	schema := graphql.MustParseSchema(s, &query{})
+
+	schema := graphql.MustParseSchema(schemaStr, &query{})
 	http.Handle("/query", &relay.Handler{Schema: schema})
 	fmt.Println("Server started at :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
