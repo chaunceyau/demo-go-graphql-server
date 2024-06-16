@@ -6,56 +6,36 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/ddosify/go-faker/faker"
 	graphql "github.com/graph-gophers/graphql-go"
 	"github.com/graph-gophers/graphql-go/relay"
 )
 
+// type CreateUserInput struct {
+// 	name  string
+// 	email string
+// }
+
 type User struct {
 	IDField    string
-	EmailField string
 	NameField  string
+	EmailField string
 	FriendIDs  []string
 }
 
-type query struct {
+type Resolver struct{}
+
+func (q *Resolver) CreateUser(ctx context.Context, args *struct {
+	Name  string
+	Email string
+}) (*User, error) {
+	return &User{
+		IDField:    "1",
+		NameField:  args.Name,
+		EmailField: args.Email,
+	}, nil
 }
 
-var lfaker = faker.NewFaker()
-
-var users = []User{
-	{IDField: "fe61b7d8-42f2-457c-b740-9fda21b0abc9", NameField: lfaker.RandomPersonFullName(), EmailField: lfaker.RandomEmail(), FriendIDs: []string{"1dd536af-04fc-4acb-9788-79dd15aa4f94", "7351ecc2-d5c2-4a7f-8239-126b082850fe"}},
-	{IDField: "1dd536af-04fc-4acb-9788-79dd15aa4f94", NameField: lfaker.RandomPersonFullName(), EmailField: lfaker.RandomEmail(), FriendIDs: []string{}},
-	{IDField: "7351ecc2-d5c2-4a7f-8239-126b082850fe", NameField: lfaker.RandomPersonFullName(), EmailField: lfaker.RandomEmail(), FriendIDs: []string{}},
-}
-
-func findUserById(id string) *User {
-	for _, user := range users {
-		if user.IDField == id {
-			return &user
-		}
-	}
-	return nil
-}
-
-func findFriendsByUserId(userId string) []*User {
-	var friends []*User
-	user := findUserById(userId)
-	if user == nil {
-		return nil
-	}
-
-	for _, friendUserId := range user.FriendIDs {
-		friend := findUserById(friendUserId)
-		if friend != nil {
-			friends = append(friends, friend)
-		}
-	}
-
-	return friends
-}
-
-func (q *query) UserById(ctx context.Context, args struct{ ID graphql.ID }) *User {
+func (q *Resolver) UserById(ctx context.Context, args struct{ ID graphql.ID }) *User {
 	return findUserById(string(args.ID))
 }
 
@@ -80,19 +60,28 @@ func (user *User) Email(ctx context.Context) string {
 
 func main() {
 	schemaStr := `
+		input CreateUserInput {
+			name: String
+			email: String!
+		}
+
+        type Mutation {
+			createUser(email: String!, name: String!): User
+		}
+
+        type Query {
+            userById(id: ID!): User
+        }
+
         type User {
             id: ID!
             name: String
             email: String!
             friends: [User]!
         }
-
-        type Query {
-            userById(id: ID!): User
-        }
     `
 
-	schema := graphql.MustParseSchema(schemaStr, &query{})
+	schema := graphql.MustParseSchema(schemaStr, &Resolver{})
 	http.Handle("/query", &relay.Handler{Schema: schema})
 	fmt.Println("Server started at :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
